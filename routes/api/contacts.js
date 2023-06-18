@@ -5,6 +5,7 @@ const {
   removeContact,
   addContact,
   updateContact,
+  updateStatusContact,
 } = require("../../models/contacts");
 const router = express.Router();
 const Joi = require("joi");
@@ -21,9 +22,12 @@ router.get("/", async (req, res) => {
 });
 
 router.get("/:id", async (req, res) => {
-  const contact = await getContactById(req.params.id);
-  if (!contact) res.status(404).json({ message: "Not found" });
-  else res.status(200).json(contact);
+  try {
+    const contact = await getContactById(req.params.id);
+    res.status(200).json(contact);
+  } catch (error) {
+    res.status(404).json({ message: "Contact not found" });
+  }
 });
 
 router.post("/", async (req, res) => {
@@ -33,6 +37,7 @@ router.post("/", async (req, res) => {
       res.status(400).json(error.message);
     } else {
       await addContact(value);
+      console.log(value);
       res.status(201).json(value);
     }
   } catch (err) {
@@ -60,12 +65,28 @@ router.put("/:id", async (req, res) => {
     if (error) res.status(400).json(error.message);
     else {
       const updatedContact = await updateContact(req.params.id, req.body);
-      if (!updatedContact) res.status(404).json({ message: "contact not found" });
-      else res.status(200).json(updatedContact);
+      if (!updatedContact) {
+        res.status(404).json({ message: "Contact not found" });
+      } else {
+        res.status(200).json(updatedContact);
+      }
     }
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
+});
+
+router.patch("/:id/favorite", async (req, res) => {
+  if (typeof req.body.favorite !== "boolean" || !req.body.favorite)
+    res.status(400).json({ message: "missing field favorite" });
+  else
+    try {
+      const contactTofavs = await updateStatusContact(req.params.id, req.body);
+      if (contactTofavs) res.status(200).json(contactTofavs);
+      else res.status(404).json({ message: "not found" });
+    } catch (error) {
+      res.status(500).json(error.message);
+    }
 });
 
 module.exports = router;
