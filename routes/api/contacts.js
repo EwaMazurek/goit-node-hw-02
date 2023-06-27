@@ -17,7 +17,17 @@ const contactSchema = Joi.object({
 });
 
 router.get("/", async (req, res) => {
-  const contacts = await listContacts();
+  const favorite = req.query.favorite;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const skip = (page - 1) * limit;
+  let contacts;
+  if (favorite) {
+    contacts = await listContacts({ favorite: favorite === "true" }, skip, limit);
+  } else {
+    contacts = await listContacts({}, skip, limit);
+  }
+
   res.status(200).json(contacts);
 });
 
@@ -88,5 +98,7 @@ router.patch("/:id/favorite", async (req, res) => {
       res.status(500).json(error.message);
     }
 });
+
+router.get("");
 
 module.exports = router;
