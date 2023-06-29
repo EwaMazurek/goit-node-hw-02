@@ -9,13 +9,14 @@ const {
 } = require("../../models/contacts");
 const router = express.Router();
 const Joi = require("joi");
+const verifyToken = require("../../token");
 
 const contactSchema = Joi.object({
   name: Joi.string().min(2).required(),
   email: Joi.string().email().required(),
   phone: Joi.string().min(7).required(),
 });
-
+router.use(verifyToken);
 router.get("/", async (req, res) => {
   const favorite = req.query.favorite;
   const page = parseInt(req.query.page) || 1;
