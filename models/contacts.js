@@ -6,8 +6,8 @@ console.log(contactsPath);
 
 const Contact = require("./contactModel");
 
-const listContacts = async () => {
-  const contacts = await Contact.find();
+const listContacts = async (filter = {}, page = 1, limit = 20) => {
+  const contacts = await Contact.find(filter).skip(page).limit(limit);
   return contacts;
 };
 
