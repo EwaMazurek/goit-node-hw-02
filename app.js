@@ -6,7 +6,7 @@ const contactsRouter = require("./routes/api/contacts");
 const accessDb = require("./dbConnection");
 
 const app = express();
-
+app.use(express.static("public"));
 const formatsLogger = app.get("env") === "development" ? "dev" : "short";
 accessDb();
 app.use(logger(formatsLogger));

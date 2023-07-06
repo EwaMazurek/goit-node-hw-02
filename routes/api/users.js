@@ -4,11 +4,25 @@ const router = express.Router();
 const Joi = require("joi");
 const jwt = require("jsonwebtoken");
 const verifyToken = require("../../token");
+const gravatar = require("gravatar");
+const multer = require("multer");
+const jimp = require("jimp");
+const fs = require("fs");
 
 const userSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().min(8).required(),
 });
+
+const storage = multer.diskStorage({
+  destination: "./tmp",
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + "-" + file.originalname);
+  },
+});
+
+const upload = multer({ storage });
 
 router.post("/signup", async (req, res) => {
   const { error, value } = userSchema.validate(req.body);
@@ -20,7 +34,8 @@ router.post("/signup", async (req, res) => {
     if (user) res.status(409).json({ message: "email in use" });
     else
       try {
-        const newUser = new User({ email });
+        const avatarURL = gravatar.url(email, { s: "200", r: "pg", d: "mm" });
+        const newUser = new User({ email, avatarURL });
         newUser.setPassword(password);
         await newUser.save();
         res
@@ -86,6 +101,33 @@ router.patch("/", verifyToken, async (req, res) => {
     user.subscription = req.body.subscription;
     await user.save();
     res.status(201).json({ message: `subscryption updated to ${newSubscription}` });
+  }
+});
+
+router.patch("/avatars", verifyToken, upload.single("avatar"), async (req, res) => {
+  try {
+    const { file, user } = req;
+    if (!file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    // Process the avatar with jimp and set its dimensions to 250x250
+    const processedAvatar = await jimp.read(file.path);
+    processedAvatar.cover(250, 250).write(file.path);
+
+    // Move the user's avatar from the tmp folder to public/avatars and give it a unique name
+    const fileName = `${user._id}-${Date.now()}-${file.originalname}`;
+    const newPath = `public/avatars/${fileName}`;
+    await fs.renameSync(file.path, newPath);
+
+    // Update the user's avatarURL field
+    user.avatarURL = `/avatars/${fileName}`;
+    await user.save();
+
+    res.status(200).json({ avatarURL: user.avatarURL });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
   }
 });
 
