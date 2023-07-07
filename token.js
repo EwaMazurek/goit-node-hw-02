@@ -18,7 +18,7 @@ const verifyToken = async (req, res, next) => {
       return res.status(401).json(error.message);
     }
   } else {
-    res.status(401).json({ message: "Token missing" });
+    res.status(401).json({ message: "Not authorized" });
   }
 };
 

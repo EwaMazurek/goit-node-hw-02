@@ -8,6 +8,9 @@ const gravatar = require("gravatar");
 const multer = require("multer");
 const jimp = require("jimp");
 const fs = require("fs");
+require("dotenv").config();
+const { nanoid } = require("nanoid");
+const { sendVerificationEmail } = require("../../models/mail");
 
 const userSchema = Joi.object({
   email: Joi.string().email().required(),
@@ -35,9 +38,11 @@ router.post("/signup", async (req, res) => {
     else
       try {
         const avatarURL = gravatar.url(email, { s: "200", r: "pg", d: "mm" });
-        const newUser = new User({ email, avatarURL });
+        const verificationToken = nanoid();
+        const newUser = new User({ email, avatarURL, verificationToken });
         newUser.setPassword(password);
         await newUser.save();
+        await sendVerificationEmail(email, verificationToken);
         res
           .status(201)
           .json({ user: { email: newUser.email, subscryption: newUser.subscription } });
@@ -51,10 +56,11 @@ router.post("/login", async (req, res) => {
   const { email, password } = req.body;
   try {
     const user = await User.findOne({ email });
-    console.log(user.validPassword(password));
+    //console.log(user.validPassword(password));
     if (!user.validPassword(password)) {
       res.status(401).json({ message: "Email or password is wrong" });
-    } else {
+    } else if (!user.verify) res.status(401).json({ message: "user not verified" });
+    else {
       const secretKey = process.env.SECRET_KEY;
       const token = jwt.sign({ id: user._id }, secretKey);
       user.token = token;
@@ -68,7 +74,7 @@ router.post("/login", async (req, res) => {
       });
     }
   } catch (error) {
-    console.log(error);
+    console.log(error.message);
   }
 });
 
@@ -111,16 +117,13 @@ router.patch("/avatars", verifyToken, upload.single("avatar"), async (req, res) 
       return res.status(400).json({ message: "No file uploaded" });
     }
 
-    // Process the avatar with jimp and set its dimensions to 250x250
     const processedAvatar = await jimp.read(file.path);
     processedAvatar.cover(250, 250).write(file.path);
 
-    // Move the user's avatar from the tmp folder to public/avatars and give it a unique name
     const fileName = `${user._id}-${Date.now()}-${file.originalname}`;
     const newPath = `public/avatars/${fileName}`;
-    await fs.renameSync(file.path, newPath);
+    fs.renameSync(file.path, newPath);
 
-    // Update the user's avatarURL field
     user.avatarURL = `/avatars/${fileName}`;
     await user.save();
 
@@ -128,6 +131,40 @@ router.patch("/avatars", verifyToken, upload.single("avatar"), async (req, res) 
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.get("/verify/:verificationToken", async (req, res) => {
+  try {
+    const token = req.params.verificationToken;
+    const user = await User.findOne({ verificationToken: token });
+    if (!user) res.status(404).json({ message: "User not found" });
+    else {
+      user.verificationToken = "null";
+      user.verify = true;
+      await user.save();
+      res.status(200).json({ message: "Verification successful" });
+    }
+  } catch (error) {
+    res.status(490).json(error.message);
+  }
+});
+
+router.post("/verify", async (req, res) => {
+  const { email } = req.body;
+  try {
+    if (!email) res.status(400).json({ message: "missing required field email" });
+    const user = await User.findOne({ email: email });
+    if (!user) res.status(404).json({ message: "user not found" });
+    else {
+      if (user.verify) res.status(400).json({ message: "user has already been verified" });
+      else {
+        const verificationToken = user.verificationToken;
+        await sendVerificationEmail(email, verificationToken);
+      }
+    }
+  } catch (error) {
+    res.status(490).json(error.message);
   }
 });
 
